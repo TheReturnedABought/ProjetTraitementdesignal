@@ -1,3 +1,5 @@
+import numpy as np
+from skimage import color, filters, measure, morphology
 
 def detect_layout_from_image(img):
     """
