@@ -15,6 +15,6 @@ def main():
             
         # ICI : Tu appelles ta future fonction de détection
         # detecter_azerty_qwerty(images)
-
+            detect_layout_from_image(img_path)
 if __name__ == "__main__":
     main()
