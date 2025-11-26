@@ -13,6 +13,8 @@ def detect_layout_from_image(img_paths):
 
     for img_path in img_paths:
         img = plt.imread(img_path)
+        if img.shape[-1] == 4:
+            img = img[..., :3]
         gray = skimage.color.rgb2gray(img)
 
         # Seuillage
