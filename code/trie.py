@@ -1,58 +1,53 @@
+#trie
 import numpy as np
-from skimage import color, filters, measure, morphology
+import skimage
+from matplotlib import pyplot as plt
 
-def detect_layout_from_image(img):
+
+def detect_layout_from_image(img_paths):
     """
-    Detect AZERTY vs QWERTY using ONLY signal-processing tools.
-    Input:
-        img  -> an RGB image loaded with skimage.io.imread
-    Output:
-        "AZERTY", "QWERTY", or "Unknown"
+    Detect AZERTY vs QWERTY using signal processing on images list.
+    Returns a list of detections per image.
     """
+    results = []
 
-    # --- 1. Convert to grayscale ---
-    gray = color.rgb2gray(img)
+    for img_path in img_paths:
+        img = plt.imread(img_path)
+        gray = skimage.color.rgb2gray(img)
 
-    # --- 2. Threshold (binary image) ---
-    th = filters.threshold_otsu(gray)
-    binary = gray < th  # depending on contrast, you may invert (< or >)
+        # Seuillage
+        thresh = skimage.filters.threshold_otsu(gray)
+        binary = gray < thresh
 
-    # Clean binary image (remove small noise)
-    binary = morphology.remove_small_objects(binary, min_size=300)
+        # Nettoyage
+        binary = skimage.morphology.remove_small_objects(binary, min_size=300)
 
-    # --- 3. Label connected components ---
-    labels = measure.label(binary)
-    regions = measure.regionprops(labels)
+        # Label connected components
+        labels = skimage.measure.label(binary)
+        regions = skimage.measure.regionprops(labels)
 
-    # Keep only large objects (keys)
-    key_regions = [r for r in regions if r.area > 1000]
+        # Touches significatives
+        key_regions = [r for r in regions if r.area > 1000]
+        if len(key_regions) < 10:
+            results.append("Unknown")
+            continue
 
-    if len(key_regions) < 10:   # safety check
-        return "Unknown"
+        # Centroides
+        centroids = np.array([r.centroid for r in key_regions])
 
-    # --- 4. Extract centroids (x = column, y = row) ---
-    centroids = np.array([r.centroid for r in key_regions])
+        # Trier par y (ligne) puis par x (colonne)
+        centroids_sorted_y = centroids[centroids[:, 0].argsort()]
+        first_row = centroids_sorted_y[:10]
+        first_row_sorted_x = first_row[first_row[:, 1].argsort()]
 
-    # --- 5. Select first-row keys (smallest y = top of the keyboard) ---
-    # Sort by vertical (row) coordinate
-    centroids_sorted = centroids[centroids[:, 0].argsort()]
+        xs = first_row_sorted_x[:, 1]
+        diffs = np.diff(xs)
 
-    # Take the first ~10 keys (enough for one row)
-    first_row = centroids_sorted[:10]
+        if diffs[0] > np.mean(diffs) * 1.3:
+            results.append("QWERTY")
+        elif diffs[0] < np.mean(diffs) * 0.7:
+            results.append("AZERTY")
+        else:
+            results.append("Unknown")
 
-    # Sort them horizontally (by x column position)
-    first_row = first_row[first_row[:, 1].argsort()]
-
-    # Compute horizontal distances between adjacent keys (spacing)
-    xs = first_row[:, 1]
-    diffs = np.diff(xs)
-
-    # Heuristic:
-    # On QWERTY, the first key (Q) is shifted more right -> first spacing bigger
-    # On AZERTY, the first key (A) sits more left -> spacing smaller
-    if diffs[0] > np.mean(diffs) * 1.3:
-        return "QWERTY"
-    if diffs[0] < np.mean(diffs) * 0.7:
-        return "AZERTY"
-
-    return "Unknown"
+    return results

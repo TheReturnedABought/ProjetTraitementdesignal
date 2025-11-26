@@ -1,4 +1,10 @@
+#main
+import skimage
+from matplotlib import pyplot as plt
+
 from extraction import selectionner_images
+from trie import detect_layout_from_image
+import matplotlib.pyplot as plt
 
 def main():
     print("--- Programme Principal ---")
@@ -15,6 +21,6 @@ def main():
             
         # ICI : Tu appelles ta future fonction de détection
         # detecter_azerty_qwerty(images)
-
+    print(detect_layout_from_image(images))
 if __name__ == "__main__":
     main()
