@@ -50,11 +50,6 @@ def detect_layout_from_image(img_paths, debug = False):
         labels = skimage.measure.label(binary)
         regions = skimage.measure.regionprops(labels)
 
-        if debug == True:
-            axes[4].imshow(labels, cmap="nipy_spectral")
-            axes[4].set_title("5. Connected Components")
-            axes[4].axis("off")
-
         # Touches significatives
         # keys are roughly square ⇒ eccentricity ~= 0, and area is moderate
         key_regions = [
@@ -77,13 +72,13 @@ def detect_layout_from_image(img_paths, debug = False):
         diffs = np.diff(xs)
         if debug == True:
             # Display key regions in axis 5
-            axes[5].imshow(labels, cmap="nipy_spectral")
-            axes[5].set_title(f"6. Key Regions (Count: {len(key_regions)})")
-            axes[5].axis('off')
+            axes[4].imshow(labels, cmap="nipy_spectral")
+            axes[4].set_title(f"5. Key Regions (Count: {len(key_regions)})")
+            axes[4].axis('off')
             # Display centroids in axis 6
-            axes[6].imshow(labels, cmap="nipy_spectral")
-            axes[6].set_title(f"7. Centroids (Count: {len(centroids)})")
-            axes[6].axis('off')
+            axes[5].imshow(labels, cmap="nipy_spectral")
+            axes[5].set_title(f"6. Centroids (Count: {len(centroids)})")
+            axes[5].axis('off')
             # Plot centroids on axis 6
             for centroid in centroids:
                 axes[6].plot(centroid[1], centroid[0], 'ro', markersize=4)
