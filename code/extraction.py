@@ -124,7 +124,7 @@ class App(ctk.CTk):
 
         # --- 3. ANALYSE ---
         try:
-            raw_results = detect_layout_from_image(files_to_analyze)
+            raw_results = detect_layout_from_image(files_to_analyze, True)
             
             # Conversion liste -> dictionnaire si besoin
             batch_results = {}

@@ -39,7 +39,7 @@ def detect_layout_from_image(img_paths, debug = False):
 
         # Seuillage
         thresh = skimage.filters.threshold_otsu(edges)
-        binary = edges < thresh
+        binary = edges > thresh
 
         if debug == True:
             axes[3].imshow(binary, cmap="gray")
@@ -56,7 +56,11 @@ def detect_layout_from_image(img_paths, debug = False):
             axes[4].axis("off")
 
         # Touches significatives
-        key_regions = [r for r in regions if (r.area > 1000 or r.area < 2000)]
+        # keys are roughly square ⇒ eccentricity ~= 0, and area is moderate
+        key_regions = [
+            r for r in regions
+            if 800 < r.area < 5000 and r.eccentricity < 0.95
+        ]
         if len(key_regions) < 10:
             results.append("Unknown")
             continue
@@ -76,17 +80,15 @@ def detect_layout_from_image(img_paths, debug = False):
             axes[5].imshow(labels, cmap="nipy_spectral")
             axes[5].set_title(f"6. Key Regions (Count: {len(key_regions)})")
             axes[5].axis('off')
-            print(key_regions)
             # Display centroids in axis 6
             axes[6].imshow(labels, cmap="nipy_spectral")
             axes[6].set_title(f"7. Centroids (Count: {len(centroids)})")
             axes[6].axis('off')
-            print(centroids)
             # Plot centroids on axis 6
             for centroid in centroids:
                 axes[6].plot(centroid[1], centroid[0], 'ro', markersize=4)
-        plt.tight_layout()
-        plt.show()
+            plt.tight_layout()
+            plt.show()
 
         if diffs[0] > np.mean(diffs) * 1.3:
             results.append("QWERTY") #needs to be replaced with a sortqwertyfunction (us/uk etc.)
