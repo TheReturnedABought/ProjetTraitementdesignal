@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from PIL import Image
 import pytesseract
+from util import sobel
 
 def detect_layout_from_image(img_paths, debug = False):
     """
@@ -13,7 +14,7 @@ def detect_layout_from_image(img_paths, debug = False):
     results = []
 
     for img_path in img_paths:
-        fig, axes = plt.subplots(1, 7, figsize=(25, 6))
+        fig, axes = plt.subplots(1, 8, figsize=(25, 6))
         img = plt.imread(img_path)
         if img.shape[-1] == 4:
             img = img[..., :3]
@@ -24,27 +25,25 @@ def detect_layout_from_image(img_paths, debug = False):
             axes[0].axis("off")
 
         gray = skimage.color.rgb2gray(img)
+        edges = sobel(gray)
 
         if debug == True:
             axes[1].imshow(gray, cmap="gray")
             axes[1].set_title("2. Grayscale")
             axes[1].axis("off")
 
-        # Seuillage
-        thresh = skimage.filters.threshold_otsu(gray)
-        binary = gray < thresh
-
         if debug == True:
-            axes[2].imshow(binary, cmap="gray")
-            axes[2].set_title("3. Binary (Otsu)")
+            axes[2].imshow(edges, cmap="gray")
+            axes[2].set_title("3. Sobel")
             axes[2].axis("off")
 
-        # Nettoyage
-        binary = skimage.morphology.remove_small_objects(binary, min_size=100)
+        # Seuillage
+        thresh = skimage.filters.threshold_otsu(edges)
+        binary = edges < thresh
 
         if debug == True:
             axes[3].imshow(binary, cmap="gray")
-            axes[3].set_title("4. Cleaned (remove small objects)")
+            axes[3].set_title("4. Binary (Otsu)")
             axes[3].axis("off")
 
         # Label connected components
@@ -56,9 +55,8 @@ def detect_layout_from_image(img_paths, debug = False):
             axes[4].set_title("5. Connected Components")
             axes[4].axis("off")
 
-
         # Touches significatives
-        key_regions = [r for r in regions if r.area > 1000]
+        key_regions = [r for r in regions if (r.area > 1000 or r.area < 2000)]
         if len(key_regions) < 10:
             results.append("Unknown")
             continue
@@ -89,6 +87,7 @@ def detect_layout_from_image(img_paths, debug = False):
                 axes[6].plot(centroid[1], centroid[0], 'ro', markersize=4)
         plt.tight_layout()
         plt.show()
+
         if diffs[0] > np.mean(diffs) * 1.3:
             results.append("QWERTY") #needs to be replaced with a sortqwertyfunction (us/uk etc.)
         elif diffs[0] < np.mean(diffs) * 0.7:
