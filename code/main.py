@@ -17,9 +17,8 @@ def main():
         print(f"\n{len(images)} images prêtes pour l'analyse :")
         for img_path in images:
             print(f" -> {img_path}")
-            
-        # ICI : Tu appelles ta future fonction de détection
-        # detecter_azerty_qwerty(images)
-    print(detect_layout_from_image(images))
+
+    print(detect_layout_from_image(images, True))
+
 if __name__ == "__main__":
     main()
