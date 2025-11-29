@@ -70,8 +70,8 @@ def detect_layout_from_image(img_paths, debug=False):
 
         # 6. KEY REGIONS – automatic size-based filtering
         H, W = edges.shape
-        area_min = (H * W) * 0.00010   # 0.01%
-        area_max = (H * W) * 0.004     # 0.4%
+        area_min = (H * W) * 0.00005   # 0.01%
+        area_max = (H * W) * 0.01    # 0.4%
 
         key_regions = [r for r in regions if area_min < r.area < area_max]
 
