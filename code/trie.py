@@ -1,10 +1,11 @@
 #trie
-import numpy as np
 import skimage
 from matplotlib import pyplot as plt
+import numpy as np
+from PIL import Image
+import pytesseract
 
-
-def detect_layout_from_image(img_paths):
+def detect_layout_from_image(img_paths, debug = False):
     """
     Detect AZERTY vs QWERTY using signal processing on images list.
     Returns a list of detections per image.
@@ -12,21 +13,49 @@ def detect_layout_from_image(img_paths):
     results = []
 
     for img_path in img_paths:
+        fig, axes = plt.subplots(1, 6, figsize=(25, 6))
         img = plt.imread(img_path)
         if img.shape[-1] == 4:
             img = img[..., :3]
+
+        if debug == True:
+            axes[0].imshow(img)
+            axes[0].set_title("1. Original")
+            axes[0].axis("off")
+
         gray = skimage.color.rgb2gray(img)
+
+        if debug == True:
+            axes[1].imshow(gray, cmap="gray")
+            axes[1].set_title("2. Grayscale")
+            axes[1].axis("off")
 
         # Seuillage
         thresh = skimage.filters.threshold_otsu(gray)
         binary = gray < thresh
 
+        if debug == True:
+            axes[2].imshow(binary, cmap="gray")
+            axes[2].set_title("3. Binary (Otsu)")
+            axes[2].axis("off")
+
         # Nettoyage
-        binary = skimage.morphology.remove_small_objects(binary, min_size=300)
+        binary = skimage.morphology.remove_small_objects(binary, min_size=100)
+
+        if debug == True:
+            axes[3].imshow(binary, cmap="gray")
+            axes[3].set_title("4. Cleaned (remove small objects)")
+            axes[3].axis("off")
 
         # Label connected components
         labels = skimage.measure.label(binary)
         regions = skimage.measure.regionprops(labels)
+
+        if debug == True:
+            axes[4].imshow(labels, cmap="nipy_spectral")
+            axes[4].set_title("5. Connected Components")
+            axes[4].axis("off")
+
 
         # Touches significatives
         key_regions = [r for r in regions if r.area > 1000]
@@ -45,52 +74,25 @@ def detect_layout_from_image(img_paths):
         xs = first_row_sorted_x[:, 1]
         diffs = np.diff(xs)
 
+        plt.tight_layout()
+        plt.show()
         if diffs[0] > np.mean(diffs) * 1.3:
-            results.append("QWERTY")
+            results.append("QWERTY") #needs to be replaced with a sortqwertyfunction (us/uk etc.)
         elif diffs[0] < np.mean(diffs) * 0.7:
-            results.append("AZERTY")
+            results.append("AZERTY") #needs to be replaced with a sortawertyfunction (belgium/france etc. )
         else:
-            results.append(describe_unknown_keyboard(key_regions))
-
+            results.append(describe_unknown_keyboard([img_path]))
     return results
 
-def describe_unknown_keyboard(key_regions):
-    centroids = [r.centroid for r in key_regions]
-    sizes = [r.area for r in key_regions]
-    distrib = "left/right split" if centroids and max(c[1] for c in centroids) - min(c[1] for c in centroids) > 300 else "normal/compact"
 
-    # Heuristique QWERTY/AZERTY basée sur la première rangée (algorithme spatial)
-    # 1. Extraire la rangée supérieure (y minimal)
-    if centroids:
-        ys = np.array([c[0] for c in centroids])
-        min_y = np.min(ys)
-        # On prend les touches dans la zone supérieure (y proche du minimum)
-        row_indices = np.where(np.abs(ys - min_y) < 30)[0]
-        row_keys = [centroids[i] for i in row_indices]
-        if len(row_keys) >= 6:
-            row_keys = sorted(row_keys, key=lambda c: c[1])
-            xs = [c[1] for c in row_keys]
-            diffs = np.diff(xs)
-            mean_diff = np.mean(diffs[1:]) if len(diffs) > 1 else 0
-            if mean_diff > 0:
-                if diffs[0] > mean_diff * 1.3:
-                    layout_guess = "Probably QWERTY (large left offset)"
-                elif diffs[0] < mean_diff * 0.7:
-                    layout_guess = "Probably AZERTY (small left offset)"
-                else:
-                    layout_guess = "Layout unknown (row spacing analysis)"
-            else:
-                layout_guess = "Not enough spacing for layout heuristics"
-        else:
-            layout_guess = "Not enough keys in top row"
-    else:
-        layout_guess = "No keys detected"
+def describe_unknown_keyboard(img_paths):
+    """Lightweight keyboard layout detection using OCR + simple pattern matching."""
 
-    return {
-        "status": "Unknown keyboard layout",
-        "detected_keys": len(key_regions),
-        "distribution": distrib,
-        "layout_guess": layout_guess,
-        "example_centroids": centroids[:5],
-        "sizes": sizes[:5]
+    patterns = {
+        'QWERTY': list("QWERTYUIOP"),
+        'AZERTY': list("AZERTYUIOP"),
+        'DVORAK': list("AOEUIDHTNS"),
+        'COLEMAK': list("QWFGJ KLSM".replace(" ", ""))
     }
+
+    results = []
