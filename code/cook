@@ -1,0 +1,253 @@
+import easyocr
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+# =============================
+#  Inversion de couleurs avec préservation de la qualité
+# =============================
+def invert_with_quality_preservation(img):
+    """
+    Inverse les couleurs en préservant la qualité des caractères.
+    Optimisé pour texte blanc sur fond sombre.
+    """
+    # 1) Upscale AVANT tout traitement (crucial pour qualité)
+    img_upscaled = cv2.resize(img, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
+
+    # 2) Conversion en grayscale
+    gray = cv2.cvtColor(img_upscaled, cv2.COLOR_BGR2GRAY)
+
+    # 3) Débruitage AVANT inversion (préserve les contours)
+    gray = cv2.fastNlMeansDenoising(gray, h=8)
+
+    # 4) Normalisation pour maximiser le contraste
+    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
+
+    # 5) INVERSION propre
+    inverted = cv2.bitwise_not(gray)
+
+    # 6) Seuillage adaptatif sur l'image inversée (meilleur que binarisation globale)
+    # Utilise la méthode gaussienne qui est plus douce
+    binary = cv2.adaptiveThreshold(
+        inverted,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY,
+        blockSize=15,  # Taille de la zone locale (doit être impair)
+        C=3  # Constante soustraite (ajuster selon besoin)
+    )
+
+    # 7) Morphologie pour nettoyer et renforcer les caractères
+    # Erosion légère pour enlever le bruit
+    kernel_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    binary = cv2.morphologyEx(binary, cv2.MORPH_ERODE, kernel_erode, iterations=1)
+
+    # Dilatation pour récupérer l'épaisseur des lettres
+    kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+    binary = cv2.morphologyEx(binary, cv2.MORPH_DILATE, kernel_dilate, iterations=1)
+
+    return binary, inverted
+
+
+# =============================
+#  Alternative: Extraction directe du texte (sans inversion complète)
+# =============================
+def extract_text_channel(img):
+    """
+    Extrait le canal de luminance du texte blanc.
+    Alternative à l'inversion qui peut donner de meilleurs résultats.
+    """
+    # Upscale
+    img_upscaled = cv2.resize(img, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
+
+    # Conversion LAB (meilleure séparation luminance/couleur)
+    lab = cv2.cvtColor(img_upscaled, cv2.COLOR_BGR2LAB)
+    l_channel, a, b = cv2.split(lab)
+
+    # Le texte blanc a une haute luminance -> on le garde directement
+    # Seuillage pour isoler uniquement les pixels très clairs (texte)
+    _, text_mask = cv2.threshold(l_channel, 150, 255, cv2.THRESH_BINARY)
+
+    # Inversion uniquement du masque de texte
+    text_black_on_white = cv2.bitwise_not(text_mask)
+
+    # Morphologie pour nettoyer
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    text_black_on_white = cv2.morphologyEx(text_black_on_white, cv2.MORPH_CLOSE, kernel)
+
+    return text_black_on_white
+
+
+# =============================
+#  OCR optimisé
+# =============================
+def ocr_optimized(reader, img, method_name=""):
+    """
+    OCR avec paramètres optimisés et affichage des résultats.
+    """
+    results = reader.readtext(
+        img,
+        detail=1,
+        paragraph=False,
+        batch_size=1,
+        min_size=5,
+        text_threshold=0.4,
+        low_text=0.2,
+        link_threshold=0.2,
+        canvas_size=4500,
+        mag_ratio=3.0,
+        slope_ths=0.3,
+        ycenter_ths=0.7,
+        height_ths=0.7,
+        width_ths=0.7,
+        add_margin=0.15,
+        allowlist='AZERTYUIOPQSDFGHJKLMWXCVBN0123456789€éèàç'
+    )
+
+    print(f"\n{'=' * 60}")
+    print(f"{method_name}")
+    print(f"{'=' * 60}")
+    print(f"📊 {len(results)} détections OCR\n")
+
+    detected = []
+    for bbox, text, conf in results:
+        if conf > 0.25:
+            print(f"  ✓ '{text}' (confiance: {conf:.1%})")
+            detected.append(text)
+        else:
+            print(f"  ✗ '{text}' (confiance trop faible: {conf:.1%})")
+
+    print(f"\n✅ Total: {len(detected)} caractères validés")
+    return results, detected
+
+
+# =============================
+#  MAIN: Comparaison des méthodes
+# =============================
+if __name__ == "__main__":
+
+    print("🔄 Initialisation d'EasyOCR...")
+    reader = easyocr.Reader(['en', 'fr'], gpu=False)
+    print("✔ EasyOCR prêt.\n")
+
+    # Chargement
+    img_path = r"testAZERTY2.jpg"
+    img_original = cv2.imread(img_path)
+
+    if img_original is None:
+        raise FileNotFoundError(f"❌ Image introuvable: {img_path}")
+
+    print(f"✔ Image: {img_original.shape[1]}×{img_original.shape[0]} px\n")
+
+    # =============================
+    #  MÉTHODE 1: Inversion avec préservation qualité
+    # =============================
+    img_binary_method1, img_inverted_simple = invert_with_quality_preservation(img_original)
+    results1, detected1 = ocr_optimized(reader, img_binary_method1,
+                                        "MÉTHODE 1: Inversion + Seuillage adaptatif")
+
+    # =============================
+    #  MÉTHODE 2: Extraction canal luminance
+    # =============================
+    img_method2 = extract_text_channel(img_original)
+    results2, detected2 = ocr_optimized(reader, img_method2,
+                                        "MÉTHODE 2: Extraction canal luminance (LAB)")
+
+    # =============================
+    #  MÉTHODE 3: Inversion simple (référence - mauvaise qualité)
+    # =============================
+    gray_simple = cv2.cvtColor(img_original, cv2.COLOR_BGR2GRAY)
+    gray_simple = cv2.resize(gray_simple, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
+    img_method3 = cv2.bitwise_not(gray_simple)
+    results3, detected3 = ocr_optimized(reader, img_method3,
+                                        "MÉTHODE 3: Inversion simple (référence)")
+
+    # =============================
+    #  Visualisation comparative
+    # =============================
+    plt.figure(figsize=(20, 10))
+
+    # Ligne 1: Image originale + étapes intermédiaires
+    plt.subplot(2, 4, 1)
+    plt.imshow(cv2.cvtColor(img_original, cv2.COLOR_BGR2RGB))
+    plt.title("Original\n(texte blanc sur fond sombre)", fontsize=10)
+    plt.axis('off')
+
+    plt.subplot(2, 4, 2)
+    plt.imshow(img_inverted_simple, cmap='gray')
+    plt.title("Étape: Inversion simple\n(avant seuillage)", fontsize=10)
+    plt.axis('off')
+
+    plt.subplot(2, 4, 3)
+    plt.imshow(img_binary_method1, cmap='gray')
+    plt.title(f"MÉTHODE 1: Seuillage adaptatif\n{len(detected1)} détections", fontsize=10,
+              color='green' if len(detected1) > len(detected3) else 'red')
+    plt.axis('off')
+
+    plt.subplot(2, 4, 4)
+    plt.imshow(img_method2, cmap='gray')
+    plt.title(f"MÉTHODE 2: Canal luminance\n{len(detected2)} détections", fontsize=10,
+              color='green' if len(detected2) > len(detected3) else 'red')
+    plt.axis('off')
+
+
+    # Ligne 2: Résultats OCR visuels
+    def draw_ocr_results(img, results, title):
+        img_color = cv2.cvtColor(img.copy(), cv2.COLOR_GRAY2BGR) if len(img.shape) == 2 else img.copy()
+        for bbox, text, conf in results:
+            if conf > 0.25:
+                pts = np.array(bbox, dtype=np.int32)
+                cv2.polylines(img_color, [pts], True, (0, 255, 0), 3)
+                cv2.putText(img_color, f"{text}", tuple(pts[0]),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+        return img_color
+
+
+    plt.subplot(2, 4, 5)
+    img_result1 = draw_ocr_results(img_binary_method1, results1, "Méthode 1")
+    plt.imshow(cv2.cvtColor(img_result1, cv2.COLOR_BGR2RGB))
+    plt.title(f"OCR Méthode 1\nDétections: {detected1}", fontsize=9)
+    plt.axis('off')
+
+    plt.subplot(2, 4, 6)
+    img_result2 = draw_ocr_results(img_method2, results2, "Méthode 2")
+    plt.imshow(cv2.cvtColor(img_result2, cv2.COLOR_BGR2RGB))
+    plt.title(f"OCR Méthode 2\nDétections: {detected2}", fontsize=9)
+    plt.axis('off')
+
+    plt.subplot(2, 4, 7)
+    img_result3 = draw_ocr_results(img_method3, results3, "Méthode 3")
+    plt.imshow(cv2.cvtColor(img_result3, cv2.COLOR_BGR2RGB))
+    plt.title(f"OCR Méthode 3 (référence)\nDétections: {detected3}", fontsize=9)
+    plt.axis('off')
+
+    plt.subplot(2, 4, 8)
+    plt.imshow(img_method3, cmap='gray')
+    plt.title(f"MÉTHODE 3: Inversion simple\n{len(detected3)} détections (référence)", fontsize=10)
+    plt.axis('off')
+
+    plt.tight_layout()
+    plt.savefig('comparison_inversion_methods.png', dpi=200, bbox_inches='tight')
+    plt.show()
+
+    # =============================
+    #  Résumé final
+    # =============================
+    print(f"\n{'=' * 60}")
+    print("RÉSUMÉ COMPARATIF")
+    print(f"{'=' * 60}")
+    print(f"Méthode 1 (seuillage adaptatif):  {len(detected1)} caractères")
+    print(f"Méthode 2 (canal luminance):      {len(detected2)} caractères")
+    print(f"Méthode 3 (inversion simple):     {len(detected3)} caractères")
+
+    best = max([("Méthode 1", len(detected1)),
+                ("Méthode 2", len(detected2)),
+                ("Méthode 3", len(detected3))],
+               key=lambda x: x[1])
+
+    print(f"\n🏆 Meilleure méthode: {best[0]} ({best[1]} détections)")
+    print("\n💡 Conseils d'optimisation:")
+    print("   - Augmenter blockSize si les caractères sont épais")
+    print("   - Diminuer C si trop de bruit est conservé")
+    print("   - Ajuster le seuil LAB (150) selon la luminosité de votre clavier")
