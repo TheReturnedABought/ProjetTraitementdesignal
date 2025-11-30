@@ -38,7 +38,7 @@ def detect_layout_from_image(img_paths, debug = False):
 
         # Seuillage
         thresh = skimage.filters.threshold_otsu(edges)
-        binary = edges > thresh
+        binary = edges < thresh
 
         if debug == True:
             axes[3].imshow(binary, cmap="gray")
