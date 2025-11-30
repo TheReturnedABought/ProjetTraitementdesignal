@@ -3,7 +3,6 @@ import skimage
 from matplotlib import pyplot as plt
 import numpy as np
 from PIL import Image
-import pytesseract
 from util import sobel
 
 def detect_layout_from_image(img_paths, debug = False):
@@ -14,7 +13,7 @@ def detect_layout_from_image(img_paths, debug = False):
     results = []
 
     for img_path in img_paths:
-        fig, axes = plt.subplots(1, 8, figsize=(25, 6))
+        fig, axes = plt.subplots(1, 6, figsize=(25, 6))
         img = plt.imread(img_path)
         if img.shape[-1] == 4:
             img = img[..., :3]
@@ -81,7 +80,7 @@ def detect_layout_from_image(img_paths, debug = False):
             axes[5].axis('off')
             # Plot centroids on axis 6
             for centroid in centroids:
-                axes[6].plot(centroid[1], centroid[0], 'ro', markersize=4)
+                axes[5].plot(centroid[1], centroid[0], 'ro', markersize=4)
             plt.tight_layout()
             plt.show()
 
