@@ -166,83 +166,73 @@ def _map_likely(text: str) -> str:
 # =============================
 # OCR DETECTION
 # =============================
-def ocr_keyboard_layout(reader: easyocr.Reader, processed_images: List[np.ndarray]) -> Tuple:
+def ocr_keyboard_layout(reader, processed_images):
     """
-    Perform OCR on multiple preprocessed keyboard images and aggregate character detections.
-
-    This function applies EasyOCR to a list of processed images, extracts detected
-    characters, filters low-confidence results, applies likely character mappings
-    to correct OCR misreads, and aggregates results across different preprocessing methods.
-
-    Steps:
-        1. OCR is run on each processed image using an allowlist of uppercase letters and digits.
-        2. Low-confidence detections (confidence < 0.5) and long strings (>=3 chars) are ignored.
-        3. Detected text is normalized to uppercase and mapped using `_map_likely` to correct common OCR errors.
-        4. Characters detected by at least 2 methods are considered "validated".
-        5. Aggregates all unique characters, counts per character, and detections per method.
+    Perform OCR on multiple processed images and validate detected characters.
 
     Args:
-        reader (easyocr.Reader): Initialized EasyOCR reader object.
-        processed_images (List[np.ndarray]): List of preprocessed images (grayscale or binary) ready for OCR.
+        reader: EasyOCR reader instance
+        processed_images: List of preprocessed images
 
     Returns:
-        Tuple:
-            validated (List[str]): Characters detected in at least 2 methods.
-            all_unique (List[str]): All unique characters detected across all methods.
-            char_counts (Counter): Count of each detected character across all methods.
-            all_detected (List[List[Tuple[str, float]]]): List of detected characters per method with confidence.
-            method_names (List[str]): Names of the preprocessing methods corresponding to each detection list.
+        tuple: (validated_chars, all_unique_chars, char_counts, all_detected, method_names, all_full_detections)
     """
-    all_detected = []
-    method_names = ["Adaptive Threshold", "LAB Channel", "Simple Inversion", "Text"]
+    all_detected = []  # List of lists of (char, confidence) for each method
+    all_full_detections = []  # List of full OCR results with bounding boxes for each method
+    method_names = ["Contrast+Sharpen", "Blur+Sharpen", "Inversion", "Upscaled+Contrast+Blur+Sharpen"]
 
-    for proc_img in processed_images:
-        results = reader.readtext(
-            proc_img,
-            detail=1,
-            allowlist='AZERTYUIOPQSDFGHJKLMWXCVBN0123456789',
-            text_threshold=0.4,
-            low_text=0.2,
-            link_threshold=0.2,
-        )
+    # Define allowed characters for keyboard detection
+    ALLOWED_CHARS = set("AZERTYUIOPQSDFGHJKLMWXCVBNazertyuiopqsdfghjklmwxcvbn0123456789")
 
-        detected = []
-        for (bbox, text, conf) in results:
-            text = text.strip().upper()
-            if conf is None:
-                conf = 0.0
+    # Perform OCR on each processed image
+    for img in processed_images:
+        # Get full OCR results with bounding boxes
+        full_result = reader.readtext(img, allowlist=''.join(ALLOWED_CHARS), detail=1)
+        all_full_detections.append(full_result)
 
-            # Filter out long strings and low confidence
-            if len(text) >= 3:
-                continue
-            if conf < 0.50:
-                continue
+        # Extract just the characters and confidences
+        chars_confidences = []
+        for detection in full_result:
+            text = detection[1].upper().strip()  # Convert to uppercase
+            confidence = detection[2]
+            # Split multiple characters if needed
+            for char in text:
+                if char in ALLOWED_CHARS:
+                    chars_confidences.append((char, confidence))
 
-            # Apply character mapping
-            if len(text) != 1:
-                text = _map_likely(text)
-            if text and not ('A' <= text <= 'Z'):
-                text = _map_likely(text)
+        all_detected.append(chars_confidences)
 
-            if text and 'A' <= text <= 'Z':
-                detected.append((text, conf))
-
-        all_detected.append(detected)
-
-    # Combine chars from all methods
+    # Collect all detected characters from all methods
     all_chars = []
-    for det in all_detected:
-        for t, _ in det:
-            if len(t) == 1:
-                all_chars.append(t)
+    for chars_conf in all_detected:
+        all_chars.extend([char for char, _ in chars_conf])
 
-    char_counts = Counter(all_chars)
+    # Get unique characters
+    all_unique = sorted(set(all_chars))
 
-    # Validation: require at least 2 detections across methods
-    validated = [c for c, count in char_counts.items() if count >= 2]
-    all_unique = list(set(all_chars))
+    # Count occurrences across methods
+    char_counts = {}
+    for char in all_unique:
+        count = sum(1 for chars_conf in all_detected if any(c == char for c, _ in chars_conf))
+        char_counts[char] = count
 
-    return validated, all_unique, char_counts, all_detected, method_names
+    # Validation logic: character must appear in at least 2 methods to be considered valid
+    validated = [char for char in all_unique if char_counts[char] >= 2]
+
+    # Sort by frequency (descending)
+    validated = sorted(validated, key=lambda x: char_counts[x], reverse=True)
+
+    # Debug output
+    print("\nOCR Results across methods:")
+    for i, (name, chars_conf) in enumerate(zip(method_names, all_detected)):
+        chars = [char for char, _ in chars_conf]
+        print(f"  {name}: {sorted(set(chars))} ({len(chars)} chars)")
+
+    print(f"\nAll unique chars: {all_unique}")
+    print(f"Char counts: {char_counts}")
+    print(f"Validated chars (appear in ≥2 methods): {validated}")
+
+    return validated, all_unique, char_counts, all_detected, method_names, all_full_detections
 # =============================
 # ROW CLUSTERING & SCORING
 # =============================
@@ -619,7 +609,7 @@ def detect_layout_from_image(
         reader = easyocr.Reader(['en', 'fr'], gpu=False)
 
         # Get OCR results
-        validated, all_unique, char_counts, all_detected, method_names = ocr_keyboard_layout(
+        validated, all_unique, char_counts, all_detected, method_names, all_full_detections = ocr_keyboard_layout(
             reader, processed_images
         )
 
@@ -703,8 +693,14 @@ def detect_layout_from_image(
         # Visualization
         if debug:
             visualize_results(
-                img, processed_images, all_detected,
-                method_names, best_layout, confidence, detected_chars  # Keep original for visualization if needed
+                img_original=img,
+                processed_images=processed_images,
+                ocr_results=all_detected,
+                ocr_full_detections=all_full_detections,  # You need this variable!
+                method_names=method_names,
+                layout_result=best_layout,
+                confidence=confidence,
+                detected_chars=detected_chars
             )
 
         results[path] = (best_layout, confidence)
