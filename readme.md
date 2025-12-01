@@ -1,7 +1,6 @@
 
 
-![image](https://github.com/user-attachments/assets/e5105a23-c385-4117-80eb-d43e7c163a91)
-
+<img width="1385" height="693" alt="image" src="https://github.com/user-attachments/assets/8044874c-46b3-4b90-be40-ec20fe2f0c26" />
 
 
 disclamer : "OCR output" donne tous les caractères identifiées mais par soucis de place, il n'affiche que les 1O premiers (qui sont souvent les touches Fx ou les numéros) donc même si le résultat est AZERTY et que la sortie OCR est pas du tout cohérente, c'est normal.
@@ -31,26 +30,26 @@ Ce projet détecte automatiquement le layout de clavier (AZERTY ou QWERTY) à pa
 ### 2. Installation
 **2.1. Cloner le dépôt**
 
-´´´
+```
 bash
 git clone <URL_REPO>
 cd <VOTRE_REPO>
-´´´
+```
 
 **2.2. Créer un environnement virtuel (recommandé)**
-´´´
+```
 bash
 python -m venv .venv
 source .venv/bin/activate      # Linux/macOS
 # ou
 .\.venv\Scripts\activate       # Windows
-´´´
+```
 
 **2.3. Installer les dépendances**
-´´´
+```
 bash
 pip install -r requirements.txt
-´´´
+```
 
 Contenu du requirements.txt :
 - text
@@ -64,18 +63,21 @@ Remarque : EasyOCR installera automatiquement une version CPU de PyTorch. Pour u
 
 **3. Structure principale du code**
 
-/project
-│── detect_layout.py       # pipeline principal
-│── utils.py               # fonctions de prétraitement & dessin
-│── extraction.py          # interface CustomTkinter
-│── data/                  # images de claviers
+```
+project/
+│── detect_layout.py       # pipeline principal de détection
+│── utils.py               # prétraitements, corrections OCR, dessin bounding boxes
+│── extraction.py          # interface CustomTkinter (sélecteur d’images)
+│── data/                  # photos de claviers à analyser
 │── requirements.txt
 │── README.md
+
+```
 
 
 ### 4. Utilisation
 Lancer 
-´python main.py´
+`python main.py`
 
 Fonctionnalités de l’interface :
 - aperçu des images (scrollable + zoom)
