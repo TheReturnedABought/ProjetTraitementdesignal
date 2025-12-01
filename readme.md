@@ -1,5 +1,6 @@
 
-<img width="1385" height="693" alt="image" src="https://github.com/user-attachments/assets/cb055e7a-3694-46d7-bd3e-4fdc45e53725" />
+![image](https://github.com/user-attachments/assets/e5105a23-c385-4117-80eb-d43e7c163a91)
+
 
 
 disclamer : "OCR output" donne tous les caractères identifiées mais par soucis de place, il n'affiche que les 1O premiers (qui sont souvent les touches Fx ou les numéros) donc même si le résultat est AZERTY et que la sortie OCR est pas du tout cohérente, c'est normal.
