@@ -7,7 +7,7 @@ try:
     from trie import detect_layout_from_image
 except ImportError:
     print("ATTENTION: Impossible d'importer detect_layout_from_image. Mode simulation activé.")
-    def detect_layout_from_image(paths):
+    def detect_layout_from_image(paths, debug = True):
         # Simulation d'un retour dictionnaire complexe (comme sur ton screen)
         return [ {'status': 'Unknown keyboard layout', 'detected_keys': 47, 'layout': 'Inconnu'} for _ in paths ]
 # ----------------------------------------------

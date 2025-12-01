@@ -5,9 +5,10 @@ import easyocr
 from collections import Counter
 from typing import List, Tuple, Dict, Any
 import warnings
-import sklearn
-import skimage
-from torch.nn.functional import binary_cross_entropy
+
+from sklearn.utils.multiclass import type_of_target
+
+from utils import *
 
 warnings.filterwarnings('ignore')
 
@@ -104,92 +105,39 @@ LIKELY_KEYMAP = {
     "PP": "P",
 }
 
-
 # =============================
 # PREPROCESSING METHODS
 # =============================
 
-def method1_adaptive_threshold(img: np.ndarray) -> np.ndarray:
-    """Adaptive thresholding with denoising and morphological operations."""
-    img_upscaled = cv2.resize(img, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
-    gray = cv2.cvtColor(img_upscaled, cv2.COLOR_BGR2GRAY)
-    gray = cv2.fastNlMeansDenoising(gray, h=8)
-    gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
-    inverted = cv2.bitwise_not(gray)
+def method1_contrast_and_sharpen(img: np.ndarray) -> np.ndarray:
+    img = increase_contrast(img)
+    img = sharpen_image(img)
+    img = convert_to_gray(img)
+    return img
 
-    binary = cv2.adaptiveThreshold(
-        inverted, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        blockSize=15,
-        C=3
-    )
-
-    kernel_erode = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
-    binary = cv2.morphologyEx(binary, cv2.MORPH_ERODE, kernel_erode, iterations=1)
-    kernel_dilate = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
-    binary = cv2.morphologyEx(binary, cv2.MORPH_DILATE, kernel_dilate, iterations=1)
-    return binary
-
-
-import cv2
-import numpy as np
-
-
-def method2_lab_channel(img):
-    img_upscaled = cv2.resize(img, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
-    lab = cv2.cvtColor(img_upscaled, cv2.COLOR_BGR2LAB)
-    l_channel, a, b = cv2.split(lab)
-    l_channel = cv2.fastNlMeansDenoising(l_channel, h=8)
-
-    _, text_mask = cv2.threshold(l_channel, 150, 255, cv2.THRESH_BINARY)
-    text_black_on_white = cv2.bitwise_not(text_mask)
-
-    # Check if center is mostly black
-    h, w = text_black_on_white.shape[:2]
-    center_h, center_w = h // 2, w // 2
-
-    # Define center region (adjust size as needed)
-    region_size = min(h, w) // 10  # 10% of image dimensions
-    y1 = max(0, center_h - region_size // 2)
-    y2 = min(h, center_h + region_size // 2)
-    x1 = max(0, center_w - region_size // 2)
-    x2 = min(w, center_w + region_size // 2)
-
-    center_region = text_black_on_white[y1:y2, x1:x2]
-
-    # Calculate black pixel percentage in center region
-    black_pixels = np.sum(center_region == 0)
-    total_pixels = center_region.size
-    black_percentage = (black_pixels / total_pixels) * 100
-
-    # If center is mostly black (more than 50%), invert the entire image
-    if black_percentage > 50:
-        text_black_on_white = cv2.bitwise_not(text_black_on_white)
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-    text_black_on_white = cv2.morphologyEx(text_black_on_white, cv2.MORPH_CLOSE, kernel)
-
-    return text_black_on_white
+def method2_blur_and_sharpen(img):
+    img = apply_gaussian_blur(img)
+    img = sharpen_image(img)
+    img = convert_to_gray(img)
+    return img
 
 def method3_simple_inversion(img: np.ndarray) -> np.ndarray:
+    """Simple grayscale inversion."""
     """Simple grayscale inversion."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
     return cv2.bitwise_not(gray)
 
+def method4_upscaled_contrast_blur_and_sharpen(img: np.ndarray) -> np.ndarray:
+    img = apply_gaussian_blur(img)
+    img = sharpen_image(img)
+    img = sharpen_image(img)
+    img = convert_to_gray(img)
+    return img
 
-def method4_text_only(img: np.ndarray) -> np.ndarray:
-    """Refined edge-based method to isolate text and remove background."""
-    # Combine both images where the black overlaps
-    gray = method1_adaptive_threshold(img)
-    lab = method2_lab_channel(img)
-    combined = cv2.bitwise_or(lab, gray)
-    return combined
 # =============================
 # OCR CHARACTER MAPPING
 # =============================
-
 def _map_likely(text: str) -> str:
     """Map a possibly-misread string to a single character using LIKELY_KEYMAP."""
     if not text:
@@ -215,12 +163,9 @@ def _map_likely(text: str) -> str:
         return LIKELY_KEYMAP[t[0]]
 
     return t[0] if t else ""
-
-
 # =============================
 # OCR DETECTION
 # =============================
-
 def ocr_keyboard_layout(reader: easyocr.Reader, processed_images: List[np.ndarray]) -> Tuple:
     """
     Perform OCR on multiple preprocessed keyboard images and aggregate character detections.
@@ -298,12 +243,9 @@ def ocr_keyboard_layout(reader: easyocr.Reader, processed_images: List[np.ndarra
     all_unique = list(set(all_chars))
 
     return validated, all_unique, char_counts, all_detected, method_names
-
-
 # =============================
 # ROW CLUSTERING & SCORING
 # =============================
-
 def assign_rows_to_chars(detected_letters: List[str], cluster_labels: Dict[str, int]) -> Dict[int, List[str]]:
     """
     Organize detected characters into keyboard rows based on cluster assignments.
@@ -329,84 +271,47 @@ def assign_rows_to_chars(detected_letters: List[str], cluster_labels: Dict[str, 
             row_chars[row].append(char)
         print(char, ": ", row_chars[row])
     return row_chars
-
 # =============================
 # VISUALIZATION
 # =============================
-
 def visualize_results(
         img_original: np.ndarray,
         processed_images: List[np.ndarray],
         ocr_results: List,
+        ocr_full_detections: List,
         method_names: List[str],
         layout_result: str = "",
         confidence: float = 0.0,
         detected_chars: List[str] = None
 ):
-    """Visualize preprocessing results and OCR output."""
     if detected_chars is None:
         detected_chars = []
 
-    fig, axes = plt.subplots(2, 5, figsize=(22, 12))
+    # Calculer le nombre de colonnes nécessaires (original + processed)
+    num_cols = len(processed_images) + 1
+    fig, axes = plt.subplots(2, num_cols, figsize=(4 * num_cols, 10))
 
     # Original image
     axes[0, 0].imshow(cv2.cvtColor(img_original, cv2.COLOR_BGR2RGB))
     axes[0, 0].set_title("Original Image")
     axes[0, 0].axis("off")
 
-    # Each preprocessing method
-    for i, (proc_img, name, detections) in enumerate(
-            zip(processed_images, method_names, ocr_results)
-    ):
-        # Convert grayscale to RGB for display
-        if len(proc_img.shape) == 2:
-            disp = cv2.cvtColor(proc_img, cv2.COLOR_GRAY2RGB)
-        else:
-            disp = proc_img.copy()
-
-        # Display processed image
-        axes[0, i + 1].imshow(disp)
-        axes[0, i + 1].set_title(f"{name}\n({len(detections)} chars)")
-        axes[0, i + 1].axis("off")
-
-        # OCR text panel
-        text_canvas = np.ones((400, 600, 3), dtype=np.uint8) * 255
-        y = 30
-
-        for t, conf in detections:
-            cv2.putText(
-                text_canvas, f"{t} ({conf * 100:.1f}%)",
-                (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
-                (0, 0, 0), 2
-            )
-            y += 35
-            print(name, ": ", f"{t} ({conf * 100:.1f}%)")
-        axes[1, i + 1].imshow(text_canvas)
-        axes[1, i + 1].set_title(f"OCR Output")
-        axes[1, i + 1].axis("off")
-
-    # Summary panel
+    # Summary panel (en bas à gauche)
     text_canvas = np.ones((400, 600, 3), dtype=np.uint8) * 255
     y = 40
-
     cv2.putText(text_canvas, "DETECTION SUMMARY", (10, y),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 3)
     y += 60
-
     cv2.putText(text_canvas, f"Detected Layout: {layout_result}", (10, y),
                 cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 100, 0), 2)
     y += 50
-
     cv2.putText(text_canvas, f"Confidence: {confidence:.1f}%", (10, y),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
     y += 50
-
     cv2.putText(text_canvas, f"Detected Chars ({len(detected_chars)}):", (10, y),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
     y += 40
-
-    # Show characters in rows
-    chars_text = " ".join(sorted(detected_chars))
+    chars_text = " ".join(sorted(set(detected_chars)))
     cv2.putText(text_canvas, chars_text, (10, y),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.8, (50, 50, 200), 2)
 
@@ -414,9 +319,36 @@ def visualize_results(
     axes[1, 0].set_title("Layout Detection")
     axes[1, 0].axis("off")
 
+    # Chaque méthode de prétraitement
+    for i, (proc_img, name, detections, full_detections) in enumerate(
+            zip(processed_images, method_names, ocr_results, ocr_full_detections)
+    ):
+        # Dessiner les bounding boxes sur l'image
+        img_with_boxes = draw_boxes_on_image(proc_img, full_detections)
+
+        axes[0, i + 1].imshow(cv2.cvtColor(img_with_boxes, cv2.COLOR_BGR2RGB))
+        axes[0, i + 1].set_title(f"{name}\n({len(detections)} chars)")
+        axes[0, i + 1].axis("off")
+
+        # OCR text panel
+        text_canvas = np.ones((400, 600, 3), dtype=np.uint8) * 255
+        y = 30
+        for t, conf in detections:
+            cv2.putText(
+                text_canvas, f"{t} ({conf * 100:.1f}%)",
+                (10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.9,
+                (0, 0, 0), 2
+            )
+            y += 35
+            if y > 370:  # Éviter de dépasser le canvas
+                break
+
+        axes[1, i + 1].imshow(text_canvas)
+        axes[1, i + 1].set_title(f"OCR Output")
+        axes[1, i + 1].axis("off")
+
     plt.tight_layout()
     plt.show()
-
 
 def score_layout_with_row_clustering(detected_letters: List[str], cluster_labels: Dict[str, int]) -> Dict[str, float]:
     """
@@ -478,7 +410,7 @@ def score_layout_with_row_clustering(detected_letters: List[str], cluster_labels
                             row_correctness += 3.0
                         else:
                             # Wrong row
-                            row_correctness += 0.2
+                            row_correctness -= 0.2
                     else:
                         # Character not in this layout
                         row_correctness -= 1.0
@@ -540,6 +472,21 @@ def score_layout_with_row_clustering(detected_letters: List[str], cluster_labels
             if azerty_consistent:
                 coherence += 5.0
 
+        if layout_name == 'QWERTY':
+            qwerty_consistent = True
+            # Q and W should be in top row if we have row info
+            if cluster_labels:
+                if 'Q' in cluster_labels and 'W' in cluster_labels:
+                    if cluster_labels['Q'] != 0 or cluster_labels['W'] != 0:
+                        qwerty_consistent = False
+                # W should be in bottom row
+                if 'Z' in cluster_labels:
+                    if cluster_labels['Z'] != 2:
+                        qwerty_consistent = False
+
+            if qwerty_consistent:
+                coherence += 5.0
+
         # Total score with weights
         total_score = (
                 row_correctness * 0.4 +
@@ -552,8 +499,6 @@ def score_layout_with_row_clustering(detected_letters: List[str], cluster_labels
         scores[layout_name] = max(0, total_score)
 
     return scores
-
-
 def get_row_labels_for_validated_chars(reader, processed_images, validated_chars):
     """
     Get row assignments for VALIDATED characters only.
@@ -633,7 +578,6 @@ def get_row_labels_for_validated_chars(reader, processed_images, validated_chars
         row_assignments[char] = cluster_to_row.get(cluster, 1)
         print(char, ": ", row_assignments[char])
     return row_assignments
-
 # =============================
 # MAIN DETECTION FUNCTION
 # =============================
@@ -662,13 +606,13 @@ def detect_layout_from_image(
         if img is None:
             print(f"Error: Could not load image: {path}")
             continue
-
+        img = upscale_image(img)
         # Apply preprocessing methods
         processed_images = [
-            method1_adaptive_threshold(img),
-            method2_lab_channel(img),
+            method1_contrast_and_sharpen(img),
+            method2_blur_and_sharpen(img),
             method3_simple_inversion(img),
-            method4_text_only(img)
+            method4_upscaled_contrast_blur_and_sharpen(img)
         ]
 
         # Initialize OCR reader
@@ -681,16 +625,11 @@ def detect_layout_from_image(
 
         # Use validated characters if available, otherwise all unique
         detected_chars = validated if validated else all_unique
+        detected_chars_set = set(detected_chars) if isinstance(detected_chars, list) else detected_chars
 
         # Debug output
         print(f"\nDetected characters: {sorted(detected_chars)}")
         print(f"Character counts: {char_counts}")
-
-        # Determine layout
-        if len(detected_chars) < 3:
-            print("Insufficient characters detected for layout determination.")
-            results[path] = ("Unknown", 0.0, detected_chars, {})
-            continue
 
         # Get row assignments using ONLY validated characters
         row_labels = {}
@@ -698,25 +637,13 @@ def detect_layout_from_image(
             row_labels = get_row_labels_for_validated_chars(reader, processed_images, detected_chars)
             print(f"Row assignments for validated chars: {row_labels}")
 
-        # Special handling for AZERTY keyboards
-        # Check for key AZERTY indicators that might be missing
-        azerty_indicators = {'A', 'Z', 'Q', 'W', 'M'}
-        detected_set = set(detected_chars)
-        azerty_matches = detected_set & azerty_indicators
-
-        print(f"AZERTY key indicators detected: {azerty_matches}")
-
-        # If we have strong AZERTY indicators but low score, adjust
-        if len(azerty_matches) >= 2:
-            print("Strong AZERTY indicators detected")
-
         # Score layouts
         scores = {}
         if row_labels and len(row_labels) >= 3:
-            scores = score_layout_with_row_clustering(detected_chars, row_labels)
+            scores = score_layout_with_row_clustering(detected_chars_set, row_labels)  # Use set here
         else:
             # Fall back to basic scoring without row info
-            scores = score_layout_with_row_clustering(detected_chars, {})
+            scores = score_layout_with_row_clustering(detected_chars_set, {})  # Use set here
 
         # Choose best layout
         if scores:
@@ -745,17 +672,6 @@ def detect_layout_from_image(
                 'QWERTY': {'Q', 'W', 'Y', 'A', 'S'},
                 'QWERTZ': {'Q', 'W', 'Z', 'Y'}
             }
-
-            indicators = layout_indicators.get(best_layout, set())
-            indicator_matches = len(detected_set & indicators)
-
-            if indicator_matches >= 2:
-                base_confidence = min(100, base_confidence + 20)
-
-            # Boost confidence for significant score difference
-            if score_diff > 5:
-                base_confidence = min(100, base_confidence + 10)
-
             confidence = base_confidence
         else:
             best_layout = "Unknown"
@@ -775,9 +691,9 @@ def detect_layout_from_image(
                 mid_row = set(layout_info['row2']['chars'])
                 bottom_row = set(layout_info['row3']['chars'])
 
-                top_matches = detected_set & top_row
-                mid_matches = detected_set & mid_row
-                bottom_matches = detected_set & bottom_row
+                top_matches = detected_chars_set & top_row  # Now using set
+                mid_matches = detected_chars_set & mid_row  # Now using set
+                bottom_matches = detected_chars_set & bottom_row  # Now using set
 
                 print(f"  {layout_name}:")
                 print(f"    Top row matches: {sorted(top_matches)}")
@@ -788,7 +704,7 @@ def detect_layout_from_image(
         if debug:
             visualize_results(
                 img, processed_images, all_detected,
-                method_names, best_layout, confidence, detected_chars
+                method_names, best_layout, confidence, detected_chars  # Keep original for visualization if needed
             )
 
         results[path] = (best_layout, confidence)
