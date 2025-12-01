@@ -79,18 +79,19 @@ def apply_gaussian_blur(img, kernel_size=(5, 5), sigma=0):
     """
     return cv2.GaussianBlur(img, kernel_size, sigma)
 
-def convert_to_gray(img):
+def convert_to_gray(img,  alpha=0.5):
     """
     Converts a BGR image to Otsu-binarized grayscale.
     If the result is mostly black, it automatically inverts it.
     """
     # Convert BGR → grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # Otsu binarization
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Blend grayscale and Otsu binary
+    soft = cv2.addWeighted(gray, alpha, otsu, 1 - alpha, 0)
 
-    return binary
+    return soft
 
 
 
