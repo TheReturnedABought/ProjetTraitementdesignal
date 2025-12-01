@@ -719,28 +719,3 @@ def detect_layout_from_image(
 
 
 import os
-
-if __name__ == "__main__":
-    imglist = []
-    data_dir = "../data"
-    answers = ["QWERTY","QWERTY","AZERTY","AZERTY","AZERTY","AZERTY","AZERTY","AZERTY",
-               "AZERTY","AZERTY","AZERTY","QWERTY","QWERTY","QWERTZ","QWERTY","QWERTY",
-               "QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTZ","QWERTY",
-               "QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTY",
-               "QWERTY","QWERTZ","QWERTZ"]
-
-    for filename in os.listdir(data_dir):
-        filepath = os.path.join(data_dir, filename)
-        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
-            imglist.append(filepath)
-
-    results = detect_layout_from_image(imglist)
-
-    # Make sure both lists are the same length
-    if len(answers) != len(results):
-        print("Warning: number of results and answers do not match!")
-
-    # Calculate percentage correct
-    correct_count = sum(1 for a, r in zip(answers, results) if a == r)
-    percent_correct = (correct_count / len(answers)) * 100
-    print(f"Accuracy: {percent_correct:.2f}%")
