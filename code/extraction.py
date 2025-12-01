@@ -140,6 +140,7 @@ class App(ctk.CTk):
 
         except Exception as e:
             self.status_label.configure(text=f"Erreur script: {e}", text_color="#FF0000")
+            print(e)
             return
 
         # --- 4. AFFICHAGE JOLI ---

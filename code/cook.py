@@ -76,7 +76,7 @@ def ocr_easyocr(reader, img, method_name="", min_confidence=0.25):
         height_ths=0.7,
         width_ths=0.7,
         add_margin=0.15,
-        allowlist='AZERTYUIOPQSDFGHJKLMWXCVBN0123456789€éèàç'
+        allowlist='ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789'
     )
 
     detected = [(text, conf) for (bbox, text, conf) in results if conf > min_confidence]
@@ -263,7 +263,7 @@ if __name__ == "__main__":
 
     reader = easyocr.Reader(['en', 'fr'], gpu=False)
 
-    img_path = r"testAZERTY4.jpg"
+    img_path = r"../data/02ktahxbanzc1.jpg"
     img_original = cv2.imread(img_path)
 
     if img_original is None:
