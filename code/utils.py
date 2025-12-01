@@ -1,21 +1,33 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+
+
 def upscale_image(img, scale=2, interpolation=cv2.INTER_CUBIC):
     """
-    Upscales an image by a given factor.
+    Upscales an image by a given factor safely.
 
     Parameters:
         img (numpy.ndarray): Input image.
-        scale (float): Upscaling factor. e.g., 2 = double size.
+        scale (float): Upscaling factor.
         interpolation (int): Interpolation method.
-            Options: cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_LANCZOS4
 
     Returns:
         numpy.ndarray: Upscaled image.
     """
     height, width = img.shape[:2]
-    new_size = (int(width * scale), int(height * scale))
+
+    # Compute new size
+    new_width = int(width * scale)
+    new_height = int(height * scale)
+
+    # Ensure we don't exceed OpenCV's limit
+    SHRT_MAX = 30000
+    new_width = min(new_width, SHRT_MAX - 1)
+    new_height = min(new_height, SHRT_MAX - 1)
+
+    new_size = (new_width, new_height)
+
     upscaled = cv2.resize(img, new_size, interpolation=interpolation)
     return upscaled
 
@@ -66,17 +78,20 @@ def apply_gaussian_blur(img, kernel_size=(5, 5), sigma=0):
         numpy.ndarray: Blurred image
     """
     return cv2.GaussianBlur(img, kernel_size, sigma)
+
 def convert_to_gray(img):
     """
-    Converts a BGR image to grayscale.
-
-    Parameters:
-        img (numpy.ndarray): Input image in BGR format
-
-    Returns:
-        numpy.ndarray: Grayscale image
+    Converts a BGR image to Otsu-binarized grayscale.
+    If the result is mostly black, it automatically inverts it.
     """
-    return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Convert BGR → grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Otsu binarization
+    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+    return binary
+
 
 
 def display_results(original_img):

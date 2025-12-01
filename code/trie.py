@@ -5,8 +5,9 @@ import easyocr
 from collections import Counter
 from typing import List, Tuple, Dict, Any
 import warnings
-
+import os
 from sklearn.utils.multiclass import type_of_target
+from sympy.physics.units import percent
 
 from utils import *
 
@@ -123,9 +124,8 @@ def method2_blur_and_sharpen(img):
 
 def method3_simple_inversion(img: np.ndarray) -> np.ndarray:
     """Simple grayscale inversion."""
-    """Simple grayscale inversion."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.resize(gray, None, fx=5, fy=5, interpolation=cv2.INTER_CUBIC)
+    gray = cv2.resize(gray, (int(gray.shape[1] * 1.1), int(gray.shape[0] * 1.1)), interpolation=cv2.INTER_CUBIC)
     return cv2.bitwise_not(gray)
 
 def method4_upscaled_contrast_blur_and_sharpen(img: np.ndarray) -> np.ndarray:
@@ -182,12 +182,22 @@ def ocr_keyboard_layout(reader, processed_images):
     method_names = ["Contrast+Sharpen", "Blur+Sharpen", "Inversion", "Upscaled+Contrast+Blur+Sharpen"]
 
     # Define allowed characters for keyboard detection
-    ALLOWED_CHARS = set("AZERTYUIOPQSDFGHJKLMWXCVBNazertyuiopqsdfghjklmwxcvbn0123456789")
+    ALLOWED_CHARS = set("AZERTYUIOPQSDFGHJKLMWXCVBNazertyuiopqsdfghjklmwxcvbn")
 
     # Perform OCR on each processed image
     for img in processed_images:
         # Get full OCR results with bounding boxes
-        full_result = reader.readtext(img, allowlist=''.join(ALLOWED_CHARS), detail=1)
+        full_result = reader.readtext(
+            img,
+            allowlist=''.join(ALLOWED_CHARS),
+            detail=1,
+            rotation_info=[90, 180, 270],
+            contrast_ths=0.5,
+            text_threshold=0.4,  # detects thinner text
+            low_text=0.3,  # improves faint text detection
+            link_threshold=0.3  # connects broken strokes
+        )
+
         all_full_detections.append(full_result)
 
         # Extract just the characters and confidences
@@ -706,3 +716,31 @@ def detect_layout_from_image(
         results[path] = (best_layout, confidence)
 
     return results
+
+
+import os
+
+if __name__ == "__main__":
+    imglist = []
+    data_dir = "../data"
+    answers = ["QWERTY","QWERTY","AZERTY","AZERTY","AZERTY","AZERTY","AZERTY","AZERTY",
+               "AZERTY","AZERTY","AZERTY","QWERTY","QWERTY","QWERTZ","QWERTY","QWERTY",
+               "QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTZ","QWERTY",
+               "QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTY","QWERTY",
+               "QWERTY","QWERTZ","QWERTZ"]
+
+    for filename in os.listdir(data_dir):
+        filepath = os.path.join(data_dir, filename)
+        if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+            imglist.append(filepath)
+
+    results = detect_layout_from_image(imglist)
+
+    # Make sure both lists are the same length
+    if len(answers) != len(results):
+        print("Warning: number of results and answers do not match!")
+
+    # Calculate percentage correct
+    correct_count = sum(1 for a, r in zip(answers, results) if a == r)
+    percent_correct = (correct_count / len(answers)) * 100
+    print(f"Accuracy: {percent_correct:.2f}%")
