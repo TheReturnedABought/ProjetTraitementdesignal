@@ -1,5 +1,7 @@
 
-<img width="1385" height="693" alt="image" src="https://github.com/user-attachments/assets/f07c26ed-2a0b-4325-9e2b-a9c05f40851c" />
+<img width="1385" height="693" alt="image" src="https://github.com/user-attachments/assets/e1bc68a0-de31-48d7-98b2-2497003422a5" />
+
+disclamer : "OCR output" donne tous les caractères identifiées mais par soucis de place, il n'affiche que les 1O premiers (qui sont souvent les touches Fx ou les numéros) donc même si le résultat est AZERTY et que la sortie OCR est pas du tout cohérente, c'est normal.
 
 
 ### Keyboard Layout Detector (AZERTY / QWERTY)
